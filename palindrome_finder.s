@@ -46,21 +46,20 @@ _start:
 
     ldr r1, =0xFF201000
     mov r3, #0
-    @ bl write_jtag_loop
+    bl write_jtag_loop
 
     // end
     b _exit
 
-// NOTE: this causes a crash due to memory alignment
-@ write_jtag_loop:
-@     ldr r2, [r0, r3]
-@     cmp r2, #0
-@     bne .+8
-@     bx lr
+write_jtag_loop:
+    ldrb r2, [r0, r3]
+    cmp r2, #0
+    bne .+8
+    bx lr
     
-@     str r2, [r1]
-@     add r3, r3, #8
-@     b write_jtag_loop
+    str r2, [r1]
+    add r3, r3, #1
+    b write_jtag_loop
 
 find_length_loop:
     ldrb r2, [r4, r1]       // load a byte from the string at [r1 + r0]
@@ -157,7 +156,7 @@ is_palindrome:
     str r3, [r2]
 
     // save for jtag
-    ldr r0, =palindrome_detected    
+    ldr r0, =palindrome_detected
     
     bx lr
 
