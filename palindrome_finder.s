@@ -17,6 +17,8 @@ _start:
     mov r12, #0
 
     ldr r4, =input
+    @ ldr r4, =long_enough
+    @ ldr r4, =not_long_enough
     @ ldr r4, =palindrome_1
     @ ldr r4, =palindrome_2
     @ ldr r4, =palindrome_3
@@ -24,10 +26,13 @@ _start:
     @ ldr r4, =palindrome_5
     @ ldr r4, =palindrome_6
     @ ldr r4, =palindrome_7
+    @ ldr r4, =palindrome_8
+    @ ldr r4, =palindrome_9
     @ ldr r4, =not_palindrome_1
     @ ldr r4, =not_palindrome_2
     
     bl find_length_loop
+    bl check_long_enough
 
     mov r8, r1              // keep orginal counter
     sub r5, r1, #1          // length of string - 1
@@ -50,6 +55,12 @@ find_length_loop:
     bx lr
     add r1, r1, #1          // increment the length counter
     b find_length_loop      // repeat until null terminator is found
+
+check_long_enough:
+    cmp r1, #2
+    bgt .+8
+    b _exit
+    bx lr
 
 check_palindrome_loop:
     ldrb r0, [r4, r2]
@@ -84,11 +95,15 @@ check_palindrome_loop:
 
     // check if uppercase, make lowercase
     cmp r0, #90             // 90 is Z
-    bgt .+8
-    add r0, #32             // 122 is z
+    bgt .+16
+    cmp r0, #65             // 65 is A
+    blt .+8
+    add r0, #32             // A < r0 < Z
 
     cmp r1, #90
-    bgt .+8
+    bgt .+16
+    cmp r1, #65
+    blt .+8
     add r1, #32 
 
     // now everything is lowercase
@@ -129,6 +144,8 @@ _exit:
 .align
     input:              .asciz "Grav ned den varg"     // The input string to check
 
+    long_enough:        .asciz "mim"
+    not_long_enough:    .asciz "m" 
     palindrome_1:       .asciz "level"
     palindrome_2:       .asciz "8448"
     palindrome_3:       .asciz "step on no pets"
@@ -136,7 +153,10 @@ _exit:
     palindrome_5:       .asciz "Was it a car or a cat i saw"
     palindrome_6:       .asciz "va?lliav"
     palindrome_7:       .asciz "A santa at NASA"
+    palindrome_8:       .asciz "1991?sos 1991"
+    palindrome_9:       .asciz "48aBa84"
     not_palindrome_1:   .asciz "hello world"
     not_palindrome_2:   .asciz "A santa"
+
 
 .end
