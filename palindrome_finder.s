@@ -1,7 +1,7 @@
 .global _start
 
-// Program Entry Point
 _start:
+    // reset registers for easier debugging
     mov r0, #0
     mov r1, #0
     mov r2, #0
@@ -27,7 +27,6 @@ _start:
     @ ldr r4, =palindrome_6
     @ ldr r4, =palindrome_7
     @ ldr r4, =palindrome_8
-    @ ldr r4, =palindrome_9
     @ ldr r4, =not_palindrome_1
     @ ldr r4, =not_palindrome_2
     
@@ -45,8 +44,23 @@ _start:
     bl is_not_palindrome
     bl is_palindrome
 
+    ldr r1, =0xFF201000
+    mov r3, #0
+    @ bl write_jtag_loop
+
     // end
     b _exit
+
+// NOTE: this causes a crash due to memory alignment
+@ write_jtag_loop:
+@     ldr r2, [r0, r3]
+@     cmp r2, #0
+@     bne .+8
+@     bx lr
+    
+@     str r2, [r1]
+@     add r3, r3, #8
+@     b write_jtag_loop
 
 find_length_loop:
     ldrb r2, [r4, r1]       // load a byte from the string at [r1 + r0]
@@ -117,14 +131,19 @@ check_palindrome_loop:
     mov r12, #0
     bx lr
 
-
 is_not_palindrome:
     cmp r12, #0
     beq .+8 
     bx lr
 
-    // is not palindrome
-    mov r0, #0
+    // set leds
+    ldr r2, =0xFF200000
+    ldr r3, =0b1111100000
+    str r3, [r2]
+
+    // save for jtag
+    ldr r0, =not_a_palindrome
+    
     bx lr
 
 is_palindrome:
@@ -132,8 +151,14 @@ is_palindrome:
     beq .+8 
     bx lr
 
-    // is palindrome
-    mov r0, #1
+    // set leds
+    ldr r2, =0xFF200000
+    ldr r3, =0b0000011111
+    str r3, [r2]
+
+    // save for jtag
+    ldr r0, =palindrome_detected    
+    
     bx lr
 
 _exit:
@@ -142,21 +167,20 @@ _exit:
 // Data Section
 .data
 .align
-    input:              .asciz "Grav ned den varg"     // The input string to check
-
-    long_enough:        .asciz "mim"
-    not_long_enough:    .asciz "m" 
-    palindrome_1:       .asciz "level"
-    palindrome_2:       .asciz "8448"
-    palindrome_3:       .asciz "step on no pets"
-    palindrome_4:       .asciz "My gym"
-    palindrome_5:       .asciz "Was it a car or a cat i saw"
-    palindrome_6:       .asciz "va?lliav"
-    palindrome_7:       .asciz "A santa at NASA"
-    palindrome_8:       .asciz "1991?sos 1991"
-    palindrome_9:       .asciz "48aBa84"
-    not_palindrome_1:   .asciz "hello world"
-    not_palindrome_2:   .asciz "A santa"
-
+    input:                  .asciz "Grav ned den varg"     // The input string to check
+    palindrome_detected:    .asciz "Palindrome detected"
+    not_a_palindrome:       .asciz "Not a palindrome"
+    long_enough:            .asciz "mim"
+    not_long_enough:        .asciz "m" 
+    palindrome_1:           .asciz "level"
+    palindrome_2:           .asciz "8448"
+    palindrome_3:           .asciz "step on no pets"
+    palindrome_4:           .asciz "My gym"
+    palindrome_5:           .asciz "va?lliav"
+    palindrome_6:           .asciz "A santa at NASA"
+    palindrome_7:           .asciz "1991?sos 1991"
+    palindrome_8:           .asciz "48aBa84"
+    not_palindrome_1:       .asciz "hello world"
+    not_palindrome_2:       .asciz "A santa"
 
 .end
