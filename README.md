@@ -1,7 +1,2 @@
-# Assignment 1
-To run the assembly code use [CPUlator for DE1-SoC](https://cpulator.01xz.net/?sys=arm-de1soc)
-
-Run the Python tests
-```bash
-pytest
-```
+# Assignment 2
+To run the C code use [CPUlator for DE1-SoC](https://cpulator.01xz.net/?sys=arm-de1soc)
