@@ -1,7 +1,5 @@
-/***************************************************************************************************
- * DON'T REMOVE THE VARIABLES BELOW THIS COMMENT                                                   *
- **************************************************************************************************/
-unsigned long long __attribute__((used)) VGAaddress = 0xc8000000; // Memory storing pixels
+unsigned long long __attribute__((used)) VGAaddress = 0xC8000000;  // Memory storing pixels
+unsigned long long __attribute__((used)) UARTaddress = 0xFF201000; // Memory storing UART data
 unsigned int __attribute__((used)) red = 0x0000F0F0;
 unsigned int __attribute__((used)) green = 0x00000F0F;
 unsigned int __attribute__((used)) blue = 0x000000FF;
@@ -10,16 +8,12 @@ unsigned int __attribute__((used)) black = 0x0;
 
 unsigned char n_cols = 10; // <- This variable might change depending on the size of the game. Supported value range: [1,18]
 
-char *won = "You Won";       // DON'T TOUCH THIS - keep the string as is
-char *lost = "You Lost";     // DON'T TOUCH THIS - keep the string as is
-unsigned short height = 240; // DON'T TOUCH THIS - keep the value as is
-unsigned short width = 320;  // DON'T TOUCH THIS - keep the value as is
-char font8x8[128][8];        // DON'T TOUCH THIS - this is a forward declaration
-/**************************************************************************************************/
+char *won = "You Won";
+char *lost = "You Lost";
+unsigned short height = 240;
+unsigned short width = 320;
 
-/***
- * TODO: Define your variables below this comment
- */
+// TODO: Define your variables below this comment
 
 /***
  * You might use and modify the struct/enum definitions below this comment
@@ -43,62 +37,63 @@ typedef enum _gameState
 } GameState;
 GameState currentState = Stopped;
 
-/***
- * Here follow the C declarations for our assembly functions
- */
-
-// TODO: Add a C declaration for the ClearScreen assembly procedure
-void SetPixel(unsigned int x_coord, unsigned int y_coord, unsigned int color);
-void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
-void DrawBar(unsigned int y);
-int ReadUart();
-void WriteUart(char c);
-
-/***
- * Now follow the assembly implementations
- */
-
+void ClearScreen();
 asm("ClearScreen: \n\t"
     "    PUSH {LR} \n\t"
     "    PUSH {R4, R5} \n\t"
     // TODO: Add ClearScreen implementation in assembly here
-    "    POP {R4,R5}\n\t"
+    "    POP {R4, R5} \n\t"
     "    POP {LR} \n\t"
     "    BX LR");
 
 // assumes R0 = x-coord, R1 = y-coord, R2 = colorvalue
+void SetPixel(unsigned int x_coord, unsigned int y_coord, unsigned int color);
 asm("SetPixel: \n\t"
     "LDR R3, =VGAaddress \n\t"
     "LDR R3, [R3] \n\t"
     "LSL R1, R1, #10 \n\t"
     "LSL R0, R0, #1 \n\t"
     "ADD R1, R0 \n\t"
-    "STRH R2, [R3,R1] \n\t"
+    "STRH R2, [R3, R1] \n\t"
     "BX LR");
 
+void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
 // TODO: Implement the DrawBlock function in assembly. You need to accept 5 parameters, as outlined in the c declaration above (unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color)
 asm("DrawBlock: \n\t"
     // TODO: Here goes your implementation
     "BX LR");
 
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
+void DrawBar(unsigned int y);
 asm("DrawBar: \n\t"
     "BX LR");
 
+int ReadUart();
 asm("ReadUart:\n\t"
     "LDR R1, =0xFF201000 \n\t"
-    "LDR R0, [R1]\n\t"
+    "LDR R0, [R1] \n\t"
     "BX LR");
 
-// TODO: Add the WriteUart assembly procedure here that respects the WriteUart C declaration on line 46
+void WriteUart(char c);
+asm("WriteUart:\n\t"
+    "LDR R1, =UARTaddress \n\t"
+    "LDR R1, [R1] \n\t"
+    "STRH R0, [R1] \n\t"
+    "BX LR");
 
 // TODO: Implement the C functions below
 void draw_ball()
 {
+    // the ball is a 7x7 black square
 }
 
 void draw_playing_field()
 {
+    // the blocks are 15x15, neighboring blocks have different colors
+    // the bar is 7x45 pixels
+    // if the ball hits the 15 upper pixels -> 45 angles
+    // if the ball hits the 15 middle pixels -> 90 angles
+    // if the ball hits the 15 lower pixels -> 135 angles
 }
 
 void update_game_state()
@@ -109,6 +104,8 @@ void update_game_state()
     }
 
     // TODO: Check: game won? game lost?
+    // ball has reached the right -> win
+    // ball has reached the left -> lost
 
     // TODO: Update balls position and direction
 
@@ -119,32 +116,60 @@ void update_game_state()
 void update_bar_state()
 {
     int remaining = 0;
+    // w or s will also start the game
+    // enter ends the game
+
     // TODO: Read all chars in the UART Buffer and apply the respective bar position updates
-    // HINT: w == 77, s == 73
+    // HINT: w == 77, s == 73, enter == 10
+    // w -> move bar up 15 pixels
+    // s -> move bar down 15 pixels
+
+    // if var == 10
+    // {
+    //     currentState = Exit;
+    //     return;
+    // }
+
     // HINT Format: 0x00 'Remaining Chars':2 'Ready 0x80':2 'Char 0xXX':2, sample: 0x00018077 (1 remaining character, buffer is ready, current character is 'w')
 }
 
 void write(char *str)
 {
     // TODO: Use WriteUart to write the string to JTAG UART
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        WriteUart(str[i]);
+    }
 }
 
 void play()
 {
+    WriteUart("Game started! Good luck!\n");
+
+    if (n_cols < 1 || n_cols > 18)
+    {
+        write("Invalid number of columns\n");
+        return;
+    }
+
     ClearScreen();
+
     // HINT: This is the main game loop
     while (1)
     {
         update_game_state();
         update_bar_state();
+
         if (currentState != Running)
         {
             break;
         }
+
         draw_playing_field();
         draw_ball();
         DrawBar(120); // TODO: replace the constant value with the current position of the bar
     }
+
     if (currentState == Won)
     {
         write(won);
@@ -157,13 +182,15 @@ void play()
     {
         return;
     }
+
     currentState = Stopped;
 }
 
 void reset()
 {
-    // Hint: This is draining the UART buffer
+    // HINT: This is draining the UART buffer
     int remaining = 0;
+
     do
     {
         unsigned long long out = ReadUart();
@@ -181,11 +208,29 @@ void reset()
 void wait_for_start()
 {
     // TODO: Implement waiting behaviour until the user presses either w/s
+
+    while (1)
+    {
+        int c = ReadUart();
+
+        if (c == 77 || c == 73)
+        {
+            currentState = Running;
+            return;
+        }
+    }
 }
 
 int main(int argc, char *argv[])
 {
-    ClearScreen();
+    // ClearScreen();
+    for (int i = 0; i < 320; i++)
+    {
+        for (int j = 0; j < 240; j++)
+        {
+            SetPixel(i, j, 0xFFFFFF);
+        }
+    }
 
     // HINT: This loop allows the user to restart the game after loosing/winning the previous game
     while (1)
@@ -193,10 +238,12 @@ int main(int argc, char *argv[])
         wait_for_start();
         play();
         reset();
+
         if (currentState == Exit)
         {
             break;
         }
     }
+
     return 0;
 }
