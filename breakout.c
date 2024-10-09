@@ -12,8 +12,9 @@ char *won = "You Won";
 char *lost = "You Lost";
 unsigned short height = 240;
 unsigned short width = 320;
-
-// TODO: Define your variables below this comment
+unsigned int bar_y = 120;
+unsigned int ball_x = 15;
+unsigned int ball_y = 120;
 
 /***
  * You might use and modify the struct/enum definitions below this comment
@@ -85,6 +86,7 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // the ball is a 7x7 black square
+    DrawBlock(ball_x, ball_y, 7, 7, black);
 }
 
 void draw_playing_field()
@@ -94,6 +96,16 @@ void draw_playing_field()
     // if the ball hits the 15 upper pixels -> 45 angles
     // if the ball hits the 15 middle pixels -> 90 angles
     // if the ball hits the 15 lower pixels -> 135 angles
+}
+
+int has_won_game()
+{
+    return ball_x == width;
+}
+
+int has_lost_game()
+{
+    return ball_x == 0;
 }
 
 void update_game_state()
@@ -106,6 +118,17 @@ void update_game_state()
     // TODO: Check: game won? game lost?
     // ball has reached the right -> win
     // ball has reached the left -> lost
+    if (has_won_game())
+    {
+        currentState = Won;
+        return;
+    }
+
+    if (has_lost_game())
+    {
+        currentState = Lost;
+        return;
+    }
 
     // TODO: Update balls position and direction
 
@@ -116,6 +139,37 @@ void update_game_state()
 void update_bar_state()
 {
     int remaining = 0;
+
+    do
+    {
+        unsigned long long out = ReadUart();
+
+        if (!(out & 0x8000))
+        {
+            // not valid - abort reading
+            return;
+        }
+        remaining = (out & 0xFF0000) >> 4;
+
+        char c = out & 0xFF;
+
+        if (c == 0x77)
+        {
+            write("up!");
+            bar_y += 15;
+        }
+        else if (c == 0x73)
+        {
+            write("down!");
+            bar_y -= 15;
+        }
+        else if (c == 0x0A)
+        {
+            currentState = Exit;
+            return;
+        }
+    } while (remaining > 0);
+
     // w or s will also start the game
     // enter ends the game
 
@@ -124,18 +178,11 @@ void update_bar_state()
     // w -> move bar up 15 pixels
     // s -> move bar down 15 pixels
 
-    // if var == 10
-    // {
-    //     currentState = Exit;
-    //     return;
-    // }
-
     // HINT Format: 0x00 'Remaining Chars':2 'Ready 0x80':2 'Char 0xXX':2, sample: 0x00018077 (1 remaining character, buffer is ready, current character is 'w')
 }
 
 void write(char *str)
 {
-    // TODO: Use WriteUart to write the string to JTAG UART
     for (int i = 0; str[i] != '\0'; i++)
     {
         WriteUart(str[i]);
@@ -144,7 +191,7 @@ void write(char *str)
 
 void play()
 {
-    WriteUart("Game started! Good luck!\n");
+    write("Game started! Good luck!\n");
 
     if (n_cols < 1 || n_cols > 18)
     {
@@ -167,7 +214,7 @@ void play()
 
         draw_playing_field();
         draw_ball();
-        DrawBar(120); // TODO: replace the constant value with the current position of the bar
+        DrawBar(bar_y);
     }
 
     if (currentState == Won)
@@ -207,28 +254,43 @@ void reset()
 
 void wait_for_start()
 {
-    // TODO: Implement waiting behaviour until the user presses either w/s
-
+    // waiting behaviour until the user presses either w/s
     while (1)
     {
-        int c = ReadUart();
+        int remaining = 0;
 
-        if (c == 77 || c == 73)
+        do
         {
-            currentState = Running;
-            return;
-        }
+            unsigned long long out = ReadUart();
+
+            if (!(out & 0x8000))
+            {
+                // not valid - abort reading
+                break;
+            }
+            remaining = (out & 0xFF0000) >> 4;
+
+            char c = out & 0xFF;
+
+            if (c == 0x77 || c == 0x73)
+            {
+                currentState = Running;
+                return;
+            }
+        } while (remaining > 0);
     }
 }
 
 int main(int argc, char *argv[])
 {
+    // reset();
     // ClearScreen();
+
     for (int i = 0; i < 320; i++)
     {
         for (int j = 0; j < 240; j++)
         {
-            SetPixel(i, j, 0xFFFFFF);
+            SetPixel(i, j, white);
         }
     }
 
