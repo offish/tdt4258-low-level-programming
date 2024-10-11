@@ -6,7 +6,9 @@ unsigned int __attribute__((used)) blue = 0x000000FF;
 unsigned int __attribute__((used)) white = 0x0000FFFF;
 unsigned int __attribute__((used)) black = 0x0;
 
-unsigned char n_cols = 10; // <- This variable might change depending on the size of the game. Supported value range: [1,18]
+// This variable might change depending on the size of the game. Supported value range: [1,18]
+const unsigned char n_cols = 10;
+const unsigned char n_rows = 15;
 
 char *won = "You Won";
 char *lost = "You Lost";
@@ -16,6 +18,7 @@ unsigned int bar_y = 120;
 unsigned int ball_x = 15;
 unsigned int ball_y = 120;
 unsigned int is_heading_right = 1;
+unsigned int ball_speed = 10;
 
 void set_default_values()
 {
@@ -35,6 +38,7 @@ typedef struct _block
     unsigned int pos_y;
     unsigned int color;
 } Block;
+struct _block blocks[10][15];
 
 typedef enum _gameState
 {
@@ -146,7 +150,24 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // the ball is a 7x7 black square
-    DrawBlock(10, ball_y, 7, 7, black);
+    DrawBlock(ball_x, ball_y, 7, 7, black);
+}
+
+void init_game()
+{
+    for (unsigned int i = 0; i < n_cols; i++)
+    {
+        for (unsigned int j = 0; j < n_rows; j++)
+        {
+            blocks[i][j].pos_x = 50 + i * 15;
+            blocks[i][j].pos_y = j * 15;
+            blocks[i][j].color = red;
+            blocks[i][j].destroyed = 0;
+            blocks[i][j].deleted = 0;
+
+            DrawBlock(blocks[i][j].pos_x, blocks[i][j].pos_y, 15, 15, blocks[i][j].color);
+        }
+    }
 }
 
 void draw_playing_field()
@@ -157,23 +178,26 @@ void draw_playing_field()
     // if the ball hits the 15 middle pixels -> 90 angles
     // if the ball hits the 15 lower pixels -> 135 angles
 
-    // for (int i = 0; i < n_cols; i++)
-    // {
-    //     for (int j = 0; j < 21; j++)
-    //     {
-    //         DrawBlock(30 + i * 15, j * 15, 15, 15, red);
-    //     }
-    // }
+    for (unsigned int i = 0; i < n_cols; i++)
+    {
+        for (unsigned int j = 0; j < n_rows; j++)
+        {
+            if (blocks[i][j].destroyed == 0)
+            {
+                DrawBlock(blocks[i][j].pos_x, blocks[i][j].pos_y, 15, 15, blocks[i][j].color);
+            }
+        }
+    }
 }
 
 int has_won_game()
 {
-    return ball_x == width;
+    return ball_x + 7 >= width;
 }
 
 int has_lost_game()
 {
-    return ball_x < 7;
+    return ball_x < 7 && ball_y < bar_y && ball_y > bar_y + 45;
 }
 
 void update_game_state()
@@ -183,22 +207,63 @@ void update_game_state()
         return;
     }
 
-    // if (has_won_game())
-    // {
-    //     currentState = Won;
-    //     return;
-    // }
+    if (has_won_game())
+    {
+        currentState = Won;
+        return;
+    }
 
-    // if (has_lost_game())
-    // {
-    //     currentState = Lost;
-    //     return;
-    // }
+    if (has_lost_game())
+    {
+        currentState = Lost;
+        return;
+    }
 
-    // TODO: Update balls position and direction
+    if (is_heading_right)
+    {
+        ball_x += ball_speed;
+    }
+    else
+    {
+        ball_x -= ball_speed;
+    }
 
-    // TODO: Hit Check with Blocks
-    // HINT: try to only do this check when we potentially have a hit, as it is relatively expensive and can slow down game play a lot
+    // check for collisions with blocks
+    if (is_heading_right == 1)
+    {
+        for (int j = 0; j < n_cols; j++)
+        {
+            for (int i = 0; i < n_rows; i++)
+            {
+                if (blocks[j][i].destroyed == 0)
+                {
+                    unsigned int x_pos = blocks[j][i].pos_x;
+                    unsigned int y_pos = blocks[j][i].pos_y;
+
+                    unsigned int x_ball_center = ball_x + 3;
+                    unsigned int y_ball_center = ball_y + 3;
+
+                    if (
+                        x_ball_center >= x_pos && x_ball_center <= x_pos + 15 && y_ball_center >= y_pos && y_ball_center <= y_pos + 15)
+                    {
+                        blocks[j][i].destroyed = 1;
+
+                        // DrawBlock(x_pos, y_pos, 15, 15, white);
+
+                        is_heading_right = !is_heading_right;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if (ball_x <= 7 && ball_y >= bar_y && ball_y <= bar_y + 45)
+        {
+            is_heading_right = !is_heading_right;
+        }
+    }
 }
 
 void update_bar_state()
@@ -221,12 +286,12 @@ void update_bar_state()
         if (c == 0x77)
         {
             // write("up!");
-            bar_y -= 15;
+            bar_y -= 5;
         }
         else if (c == 0x73)
         {
             // write("down!");
-            bar_y += 15;
+            bar_y += 5;
         }
         else if (c == 0x0A)
         {
@@ -258,15 +323,13 @@ void play()
 {
     write("Game started! Good luck!\n");
 
+    init_game();
+
     // main game loop
     while (1)
     {
+        ClearScreen();
         // reset();
-        draw_playing_field();
-        draw_ball();
-
-        DrawBar(bar_y);
-
         update_game_state();
         update_bar_state();
 
@@ -275,7 +338,9 @@ void play()
             break;
         }
 
-        ClearScreen();
+        draw_playing_field();
+        draw_ball();
+        DrawBar(bar_y);
     }
 
     if (currentState == Won)
