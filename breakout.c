@@ -15,6 +15,14 @@ unsigned short width = 320;
 unsigned int bar_y = 120;
 unsigned int ball_x = 15;
 unsigned int ball_y = 120;
+unsigned int is_heading_right = 1;
+
+void set_default_values()
+{
+    bar_y = 120;
+    ball_x = 15;
+    ball_y = 120;
+}
 
 /***
  * You might use and modify the struct/enum definitions below this comment
@@ -80,12 +88,14 @@ asm("ClearScreen: \n\t"
 void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
 asm("DrawBlock: \n\t"
     "PUSH {LR} \n\t"
-    "PUSH {R5-R9} \n\t"
-    "MOV R9, R0 \n\t"   // x
-    "MOV R5, R1 \n\t"   // y
-    "MOV R6, R2 \n\t"   // width
-    "MOV R7, R3 \n\t"   // height
-    "LDR R2, [R4] \n\t" // color
+    "PUSH {R4-R9} \n\t"
+    "MOV R9, R0 \n\t"     // x
+    "MOV R5, R1 \n\t"     // y
+    "MOV R6, R2 \n\t"     // width
+    "ADD R6, R6, R9 \n\t" // width + x
+    "MOV R7, R3 \n\t"     // height
+    "ADD R7, R7, R5 \n\t" // height + y
+    "LDR R2, [R4] \n\t"   // color
     "DrawBlockOuterLoop: \n\t"
     "MOV R4, R9 \n\t" // x
     "DrawBlockInnerLoop: \n\t"
@@ -93,18 +103,29 @@ asm("DrawBlock: \n\t"
     "MOV R1, R5 \n\t" // y
     "BL SetPixel \n\t"
     "ADD R4, R4, #1 \n\t"
-    "CMP R4, R6 \n\t"
+    "CMP R4, R6 \n\t" // compare x with width
     "BNE DrawBlockInnerLoop \n\t"
     "ADD R5, R5, #1 \n\t"
-    "CMP R5, R7 \n\t"
+    "CMP R5, R7 \n\t" // comare y with height
     "BNE DrawBlockOuterLoop \n\t"
-    "POP {R5-R9} \n\t"
+    "POP {R4-R9} \n\t"
     "POP {LR} \n\t"
     "BX LR");
 
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
+// assumes R0=y
 void DrawBar(unsigned int y);
 asm("DrawBar: \n\t"
+    "PUSH {LR} \n\t"
+    "PUSH {R4} \n\t"
+    "MOV R1, R0 \n\t"  // y
+    "MOV R0, #0 \n\t"  // x
+    "MOV R2, #7 \n\t"  // width
+    "MOV R3, #45 \n\t" // height
+    "LDR R4, =blue \n\t"
+    "BL DrawBlock \n\t"
+    "POP {R4} \n\t"
+    "POP {LR} \n\t"
     "BX LR");
 
 int ReadUart();
@@ -125,7 +146,7 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // the ball is a 7x7 black square
-    DrawBlock(ball_x, ball_y, 7, 7, black);
+    DrawBlock(10, ball_y, 7, 7, black);
 }
 
 void draw_playing_field()
@@ -135,6 +156,14 @@ void draw_playing_field()
     // if the ball hits the 15 upper pixels -> 45 angles
     // if the ball hits the 15 middle pixels -> 90 angles
     // if the ball hits the 15 lower pixels -> 135 angles
+
+    // for (int i = 0; i < n_cols; i++)
+    // {
+    //     for (int j = 0; j < 21; j++)
+    //     {
+    //         DrawBlock(30 + i * 15, j * 15, 15, 15, red);
+    //     }
+    // }
 }
 
 int has_won_game()
@@ -144,7 +173,7 @@ int has_won_game()
 
 int has_lost_game()
 {
-    return ball_x == 0;
+    return ball_x < 7;
 }
 
 void update_game_state()
@@ -154,17 +183,17 @@ void update_game_state()
         return;
     }
 
-    if (has_won_game())
-    {
-        currentState = Won;
-        return;
-    }
+    // if (has_won_game())
+    // {
+    //     currentState = Won;
+    //     return;
+    // }
 
-    if (has_lost_game())
-    {
-        currentState = Lost;
-        return;
-    }
+    // if (has_lost_game())
+    // {
+    //     currentState = Lost;
+    //     return;
+    // }
 
     // TODO: Update balls position and direction
 
@@ -191,13 +220,13 @@ void update_bar_state()
 
         if (c == 0x77)
         {
-            write("up!");
-            bar_y += 15;
+            // write("up!");
+            bar_y -= 15;
         }
         else if (c == 0x73)
         {
-            write("down!");
-            bar_y -= 15;
+            // write("down!");
+            bar_y += 15;
         }
         else if (c == 0x0A)
         {
@@ -229,17 +258,15 @@ void play()
 {
     write("Game started! Good luck!\n");
 
-    if (n_cols < 1 || n_cols > 18)
-    {
-        write("Invalid number of columns\n");
-        return;
-    }
-
-    // ClearScreen();
-
-    // HINT: This is the main game loop
+    // main game loop
     while (1)
     {
+        // reset();
+        draw_playing_field();
+        draw_ball();
+
+        DrawBar(bar_y);
+
         update_game_state();
         update_bar_state();
 
@@ -248,9 +275,7 @@ void play()
             break;
         }
 
-        draw_playing_field();
-        draw_ball();
-        DrawBar(bar_y);
+        ClearScreen();
     }
 
     if (currentState == Won)
@@ -263,6 +288,7 @@ void play()
     }
     else if (currentState == Exit)
     {
+        write("Game ended!\n");
         return;
     }
 
@@ -286,6 +312,8 @@ void reset()
     } while (remaining > 0);
 
     // TODO: You might want to reset other state in here
+    // set_default_values();
+    // ClearScreen();
 }
 
 void wait_for_start()
@@ -319,10 +347,18 @@ void wait_for_start()
 
 int main(int argc, char *argv[])
 {
-    // reset();
+    if (n_cols < 1 || n_cols > 18)
+    {
+        write("Invalid number of columns\n");
+        return 1;
+    }
+
     ClearScreen();
 
-    DrawBlock(0, 0, 15, 15, red);
+    // DrawBlock(0, 0, 15, 15, red);
+    // DrawBar(50);
+
+    // return 0;
 
     // HINT: This loop allows the user to restart the game after loosing/winning the previous game
     while (1)
