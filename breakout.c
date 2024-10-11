@@ -38,15 +38,6 @@ typedef enum _gameState
 } GameState;
 GameState currentState = Stopped;
 
-void ClearScreen();
-asm("ClearScreen: \n\t"
-    "    PUSH {LR} \n\t"
-    "    PUSH {R4, R5} \n\t"
-    // TODO: Add ClearScreen implementation in assembly here
-    "    POP {R4, R5} \n\t"
-    "    POP {LR} \n\t"
-    "    BX LR");
-
 // assumes R0 = x-coord, R1 = y-coord, R2 = colorvalue
 void SetPixel(unsigned int x_coord, unsigned int y_coord, unsigned int color);
 asm("SetPixel: \n\t"
@@ -58,10 +49,57 @@ asm("SetPixel: \n\t"
     "STRH R2, [R3, R1] \n\t"
     "BX LR");
 
+void ClearScreen();
+asm("ClearScreen: \n\t"
+    "PUSH {LR} \n\t"
+    "PUSH {R4, R5} \n\t"
+    "LDR R2, =white \n\t"
+    "LDR R2, [R2] \n\t"
+    "MOV R5, #0 \n\t"
+    "ClearScreenOuterLoop: \n\t"
+    "MOV R4, #0  \n\t"
+    "ClearScreenInnerLoop: \n\t"
+    "MOV R0, R4 \n\t"
+    "MOV R1, R5 \n\t"
+    "BL SetPixel \n\t"
+    "ADD R4, R4, #1 \n\t"
+    "CMP R4, #320 \n\t"
+    "BEQ ClearScreenNextRow \n\t"
+    "B ClearScreenInnerLoop \n\t"
+    "ClearScreenNextRow: \n\t"
+    "ADD R5, R5, #1 \n\t"
+    "CMP R5, #240 \n\t"
+    "BEQ ClearScreenDone \n\t"
+    "B ClearScreenOuterLoop \n\t"
+    "ClearScreenDone: \n\t"
+    "POP {R4, R5} \n\t"
+    "POP {LR} \n\t"
+    "BX LR");
+
+// assumes R0=x, R1=y, R2=width, R3=height, R4=color
 void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
-// TODO: Implement the DrawBlock function in assembly. You need to accept 5 parameters, as outlined in the c declaration above (unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color)
 asm("DrawBlock: \n\t"
-    // TODO: Here goes your implementation
+    "PUSH {LR} \n\t"
+    "PUSH {R5-R9} \n\t"
+    "MOV R9, R0 \n\t"   // x
+    "MOV R5, R1 \n\t"   // y
+    "MOV R6, R2 \n\t"   // width
+    "MOV R7, R3 \n\t"   // height
+    "LDR R2, [R4] \n\t" // color
+    "DrawBlockOuterLoop: \n\t"
+    "MOV R4, R9 \n\t" // x
+    "DrawBlockInnerLoop: \n\t"
+    "MOV R0, R4 \n\t" // x
+    "MOV R1, R5 \n\t" // y
+    "BL SetPixel \n\t"
+    "ADD R4, R4, #1 \n\t"
+    "CMP R4, R6 \n\t"
+    "BNE DrawBlockInnerLoop \n\t"
+    "ADD R5, R5, #1 \n\t"
+    "CMP R5, R7 \n\t"
+    "BNE DrawBlockOuterLoop \n\t"
+    "POP {R5-R9} \n\t"
+    "POP {LR} \n\t"
     "BX LR");
 
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
@@ -71,7 +109,8 @@ asm("DrawBar: \n\t"
 
 int ReadUart();
 asm("ReadUart:\n\t"
-    "LDR R1, =0xFF201000 \n\t"
+    "LDR R1, =UARTaddress \n\t"
+    "LDR R1, [R1] \n\t"
     "LDR R0, [R1] \n\t"
     "BX LR");
 
@@ -115,9 +154,6 @@ void update_game_state()
         return;
     }
 
-    // TODO: Check: game won? game lost?
-    // ball has reached the right -> win
-    // ball has reached the left -> lost
     if (has_won_game())
     {
         currentState = Won;
@@ -199,7 +235,7 @@ void play()
         return;
     }
 
-    ClearScreen();
+    // ClearScreen();
 
     // HINT: This is the main game loop
     while (1)
@@ -284,15 +320,9 @@ void wait_for_start()
 int main(int argc, char *argv[])
 {
     // reset();
-    // ClearScreen();
+    ClearScreen();
 
-    for (int i = 0; i < 320; i++)
-    {
-        for (int j = 0; j < 240; j++)
-        {
-            SetPixel(i, j, white);
-        }
-    }
+    DrawBlock(0, 0, 15, 15, red);
 
     // HINT: This loop allows the user to restart the game after loosing/winning the previous game
     while (1)
