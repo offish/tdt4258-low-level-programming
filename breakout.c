@@ -1,14 +1,14 @@
 unsigned long long __attribute__((used)) VGAaddress = 0xC8000000;  // Memory storing pixels
 unsigned long long __attribute__((used)) UARTaddress = 0xFF201000; // Memory storing UART data
-unsigned int __attribute__((used)) red = 0x0000F0F0;
-unsigned int __attribute__((used)) green = 0x00000F0F;
-unsigned int __attribute__((used)) blue = 0x000000FF;
-unsigned int __attribute__((used)) white = 0x0000FFFF;
+unsigned int __attribute__((used)) red = 0xF0F0;
+unsigned int __attribute__((used)) green = 0x0F0F;
+unsigned int __attribute__((used)) blue = 0x00FF;
+unsigned int __attribute__((used)) white = 0xFFFF;
 unsigned int __attribute__((used)) black = 0x0;
 
 // This variable might change depending on the size of the game. Supported value range: [1,18]
 const unsigned char n_cols = 10;
-const unsigned char n_rows = 15;
+const unsigned char n_rows = 16;
 
 char *won = "You Won";
 char *lost = "You Lost";
@@ -41,7 +41,7 @@ typedef struct _block
     unsigned int pos_y;
     unsigned int color;
 } Block;
-struct _block blocks[10][15];
+struct _block blocks[10][16];
 
 typedef enum _gameState
 {
@@ -103,7 +103,7 @@ asm("DrawBlock: \n\t"
     "ADD R6, R6, R9 \n\t" // width + x
     "MOV R7, R3 \n\t"     // height
     "ADD R7, R7, R5 \n\t" // height + y
-    "LDR R2, [R4] \n\t"   // color
+    "MOV R2, R4 \n\t"     // color
     "DrawBlockOuterLoop: \n\t"
     "MOV R4, R9 \n\t" // x
     "DrawBlockInnerLoop: \n\t"
@@ -130,6 +130,22 @@ asm("DrawBar: \n\t"
     "MOV R2, #7 \n\t"  // width
     "MOV R3, #45 \n\t" // height
     "LDR R4, =blue \n\t"
+    "LDR R4, [R4] \n\t"
+    "BL DrawBlock \n\t"
+    "POP {R4} \n\t"
+    "POP {LR} \n\t"
+    "BX LR");
+
+void DrawBall(unsigned int x, unsigned int y);
+asm("DrawBall: \n\t"
+    "PUSH {LR} \n\t"
+    "PUSH {R4} \n\t"
+    "MOV R0, R0 \n\t" // x
+    "MOV R1, R1 \n\t" // y
+    "MOV R2, #7 \n\t" // width
+    "MOV R3, #7 \n\t" // height
+    "LDR R4, =black \n\t"
+    "LDR R4, [R4] \n\t"
     "BL DrawBlock \n\t"
     "POP {R4} \n\t"
     "POP {LR} \n\t"
@@ -152,7 +168,8 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // the ball is a 7x7 black square
-    DrawBlock(ball_x, ball_y, 7, 7, black);
+    // DrawBlock(ball_x, ball_y, 7, 7, black);
+    DrawBall(ball_x, ball_y);
 }
 
 void init_blocks()
@@ -161,7 +178,7 @@ void init_blocks()
     {
         for (int j = 0; j < n_rows; j++)
         {
-            blocks[i][j].pos_x = 100 + i * 15;
+            blocks[i][j].pos_x = width - i * 15;
             blocks[i][j].pos_y = j * 15;
             blocks[i][j].color = red;
             // blocks[i][j].color = 0x0000F0F0;
@@ -177,7 +194,6 @@ void draw_playing_field()
 {
     // the blocks are 15x15, neighboring blocks have different colors
     // the bar is 7x45 pixels
-
     for (int i = 0; i < n_cols; i++)
     {
         for (int j = 0; j < n_rows; j++)
@@ -197,7 +213,7 @@ int has_won_game()
 
 int has_lost_game()
 {
-    return ball_x < 7 && ball_y < bar_y && ball_y > bar_y + 45;
+    return ball_x < 7 && (ball_y < bar_y || ball_y > bar_y + 45);
 }
 
 void check_blocks_collision()
@@ -218,16 +234,12 @@ void check_blocks_collision()
             if (x_ball_center < x_pos || x_ball_center > x_pos + 15 || y_ball_center < y_pos || y_ball_center > y_pos + 15)
                 continue;
 
-            // if (
-            //     x_ball_center >= x_pos && x_ball_center <= x_pos + 15 && y_ball_center >= y_pos && y_ball_center <= y_pos + 15)
-            // {
             blocks[i][j].destroyed = 1;
 
             // DrawBlock(x_pos, y_pos, 15, 15, white);
 
             is_heading_right = !is_heading_right;
             return;
-            // }
         }
     }
 }
@@ -240,8 +252,6 @@ void check_bar_collision()
     if (ball_x > 7 || ball_y < bar_y || ball_y > bar_y + 45)
         return;
 
-    // if (ball_x <= 7 && ball_y >= bar_y && ball_y <= bar_y + 45)
-    // {
     is_heading_right = !is_heading_right;
 
     if (ball_y < bar_y + 15)
@@ -312,13 +322,11 @@ void update_game_state()
         }
     }
 
-    // TODO: fix winning in losing conditions
     if (has_won_game())
     {
         currentState = Won;
         return;
     }
-
     if (has_lost_game())
     {
         currentState = Lost;
