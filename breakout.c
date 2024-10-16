@@ -7,8 +7,8 @@ unsigned int __attribute__((used)) white = 0xFFFF;
 unsigned int __attribute__((used)) black = 0x0;
 
 // This variable might change depending on the size of the game. Supported value range: [1,18]
-const unsigned char n_cols = 10;
-const unsigned char n_rows = 16;
+#define N_COLS 10
+#define N_ROWS 16
 
 char *won = "You Won";
 char *lost = "You Lost";
@@ -21,6 +21,7 @@ unsigned int is_heading_right = 1;
 unsigned int ball_speed = 15;
 unsigned int current_angle = 90;
 
+// resets the game to its initial state
 void set_default_values()
 {
     bar_y = 120;
@@ -30,9 +31,6 @@ void set_default_values()
     is_heading_right = 1;
 }
 
-/***
- * You might use and modify the struct/enum definitions below this comment
- */
 typedef struct _block
 {
     unsigned char destroyed;
@@ -41,7 +39,7 @@ typedef struct _block
     unsigned int pos_y;
     unsigned int color;
 } Block;
-struct _block blocks[10][16];
+struct _block blocks[N_COLS][N_ROWS];
 
 typedef enum _gameState
 {
@@ -91,7 +89,6 @@ asm("ClearScreen: \n\t"
     "POP {LR} \n\t"
     "BX LR");
 
-// TODO: fix color parameter
 // assumes R0=x, R1=y, R2=width, R3=height, R4=color
 void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
 asm("DrawBlock: \n\t"
@@ -121,6 +118,7 @@ asm("DrawBlock: \n\t"
     "BX LR");
 
 // assumes R0=y
+// the bar is 7x45 pixels
 void DrawBar(unsigned int y);
 asm("DrawBar: \n\t"
     "PUSH {LR} \n\t"
@@ -168,19 +166,19 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // the ball is a 7x7 black square
-    // DrawBlock(ball_x, ball_y, 7, 7, black);
     DrawBall(ball_x, ball_y);
+    // DrawBlock(ball_x, ball_y, 7, 7, black);
 }
 
 void init_blocks()
 {
-    for (int i = 0; i < n_cols; i++)
+    for (int i = 0; i < N_COLS; i++)
     {
-        for (int j = 0; j < n_rows; j++)
+        for (int j = 0; j < N_ROWS; j++)
         {
             blocks[i][j].pos_x = width - i * 15;
             blocks[i][j].pos_y = j * 15;
-            blocks[i][j].color = red;
+            blocks[i][j].color = red; // they will have a gradient color
             // blocks[i][j].color = 0x0000F0F0;
             blocks[i][j].destroyed = 0;
             blocks[i][j].deleted = 0;
@@ -193,11 +191,11 @@ void init_blocks()
 void draw_playing_field()
 {
     // the blocks are 15x15, neighboring blocks have different colors
-    // the bar is 7x45 pixels
-    for (int i = 0; i < n_cols; i++)
+    for (int i = 0; i < N_COLS; i++)
     {
-        for (int j = 0; j < n_rows; j++)
+        for (int j = 0; j < N_ROWS; j++)
         {
+            // dont draw destroyed blocks
             if (blocks[i][j].destroyed == 1)
                 continue;
 
@@ -208,20 +206,23 @@ void draw_playing_field()
 
 int has_won_game()
 {
+    // ball has escaped to the right
     return ball_x >= width;
 }
 
 int has_lost_game()
 {
+    // ball has escaped to the left and missed the bar
     return ball_x < 7 && (ball_y < bar_y || ball_y > bar_y + 45);
 }
 
 void check_blocks_collision()
 {
-    for (int i = 0; i < n_cols; i++)
+    for (int i = 0; i < N_COLS; i++)
     {
-        for (int j = 0; j < n_rows; j++)
+        for (int j = 0; j < N_ROWS; j++)
         {
+            // already destroyed
             if (blocks[i][j].destroyed == 1)
                 continue;
 
@@ -231,15 +232,15 @@ void check_blocks_collision()
             unsigned int x_ball_center = ball_x + 3;
             unsigned int y_ball_center = ball_y + 3;
 
+            // ball has not touched the block
             if (x_ball_center < x_pos || x_ball_center > x_pos + 15 || y_ball_center < y_pos || y_ball_center > y_pos + 15)
                 continue;
 
             blocks[i][j].destroyed = 1;
 
-            // DrawBlock(x_pos, y_pos, 15, 15, white);
-
+            // swap directions
             is_heading_right = !is_heading_right;
-            return;
+            // return;
         }
     }
 }
@@ -249,21 +250,28 @@ void check_bar_collision()
     // if the ball hits the 15 upper pixels -> 45 angles
     // if the ball hits the 15 middle pixels -> 90 angles
     // if the ball hits the 15 lower pixels -> 135 angles
+
+    // impossible to hit the bar
     if (ball_x > 7 || ball_y < bar_y || ball_y > bar_y + 45)
         return;
 
+    // swap directions
     is_heading_right = !is_heading_right;
 
+    // calculate the angle
     if (ball_y < bar_y + 15)
     {
+        // upper part of the bar
         current_angle = 45;
     }
     else if (ball_y < bar_y + 30)
     {
+        // middle part of the bar
         current_angle = 90;
     }
     else
     {
+        // lower part of the bar
         current_angle = 135;
     }
 }
@@ -273,6 +281,7 @@ void update_game_state()
     if (currentState != Running)
         return;
 
+    // move the ball
     if (is_heading_right)
     {
         if (current_angle == 45)
@@ -308,6 +317,7 @@ void update_game_state()
         }
     }
 
+    // check for collisions with the walls (top and bottom)
     if (ball_y >= height - 7 || ball_y <= 0)
     {
         current_angle = 180 - current_angle;
@@ -322,6 +332,7 @@ void update_game_state()
         }
     }
 
+    // check for collisions with the walls (left and right)
     if (has_won_game())
     {
         currentState = Won;
@@ -333,7 +344,7 @@ void update_game_state()
         return;
     }
 
-    // check for collisions with blocks
+    // check for other collisions (blocks, bar)
     if (is_heading_right == 1)
     {
         check_blocks_collision();
@@ -359,8 +370,10 @@ void update_bar_state()
         }
         remaining = (out & 0xFF0000) >> 4;
 
+        // get the character
         char c = out & 0xFF;
 
+        // w -> up
         if (c == 0x77)
         {
             // write("up!");
@@ -369,6 +382,7 @@ void update_bar_state()
                 bar_y -= 15;
             }
         }
+        // s -> down
         else if (c == 0x73)
         {
             // write("down!");
@@ -377,6 +391,7 @@ void update_bar_state()
                 bar_y += 15;
             }
         }
+        // enter -> exit
         else if (c == 0x0A)
         {
             currentState = Exit;
@@ -397,6 +412,7 @@ void play()
 {
     write("Game started! Good luck!\n");
 
+    // initialize the blocks
     init_blocks();
 
     // main game loop
@@ -470,8 +486,10 @@ void wait_for_start()
             }
             remaining = (out & 0xFF0000) >> 4;
 
+            // get the character
             char c = out & 0xFF;
 
+            // w or s -> start the game
             if (c == 0x77 || c == 0x73)
             {
                 currentState = Running;
@@ -483,10 +501,10 @@ void wait_for_start()
 
 int main(int argc, char *argv[])
 {
-    if (n_cols < 1 || n_cols > 18)
+    if (N_COLS < 1 || N_COLS > 18)
     {
         write("Invalid number of columns\n");
-        return 1;
+        return 0;
     }
 
     ClearScreen();
