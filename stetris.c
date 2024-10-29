@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <termios.h>
@@ -23,6 +24,7 @@
 typedef struct
 {
     bool occupied;
+    int color;
 } tile;
 
 typedef struct
@@ -61,12 +63,79 @@ gameConfig game = {
     .initNextGameTick = 50,
 };
 
+#define SENSE_HAT_FB "/dev/fb0"
+#define SENSE_HAT_JOYSTICK "/dev/input/event0"
+#define RAND_MAX 6
+
+size_t screen_size = 8 * 8;
+static char *fbp = 0;
+static int frame_buffer_device = -1;
+static int joystick_device = -1;
+static struct fb_var_screeninfo var_screeninfo;
+static struct fb_fix_screeninfo fixed_screeninfo;
+
+const int red_color = 0xf800;
+const int green_color = 0x07e0;
+const int blue_color = 0x001f;
+const int cyan_color = 0x07ff;
+const int magenta_color = 0xf81f;
+const int yellow_color = 0xffe0;
+const int orange_color = 0xfd40;
+
+int colors[] = {red_color, green_color, blue_color, cyan_color, magenta_color, yellow_color, orange_color};
+unsigned int counter = 0;
+
+static inline bool tileOccupied(coord const target);
+
+int getRandomColor()
+{
+    counter++;
+    return colors[counter % 7];
+}
+
 // This function is called on the start of your application
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
 bool initializeSenseHat()
 {
-    // TODO:
+    frame_buffer_device = open(SENSE_HAT_FB, O_RDWR);
+
+    if (frame_buffer_device == -1)
+    {
+        perror("Error: cannot open framebuffer device");
+        return false;
+    }
+
+    // Get fixed screen information
+    if (ioctl(frame_buffer_device, FBIOGET_FSCREENINFO, &fixed_screeninfo))
+    {
+        perror("Error reading fixed information");
+        return false;
+    }
+
+    // Get variable screen information
+    if (ioctl(frame_buffer_device, FBIOGET_VSCREENINFO, &var_screeninfo))
+    {
+        perror("Error reading variable information");
+        return false;
+    }
+
+    // Map the device to memory
+    fbp = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, frame_buffer_device, 0);
+    if ((int)fbp == -1)
+    {
+        perror("Error: failed to map framebuffer device to memory");
+        return false;
+    }
+
+    // Open joystick device
+    joystick_device = open(SENSE_HAT_JOYSTICK, O_RDONLY | O_NONBLOCK);
+    if (joystick_device == -1)
+    {
+        perror("Error: cannot open joystick device");
+        return false;
+    }
+
     return true;
 }
 
@@ -74,7 +143,18 @@ bool initializeSenseHat()
 // Here you can free up everything that you might have opened/allocated
 void freeSenseHat()
 {
-    // TODO:
+    if (fbp)
+    {
+        munmap(fbp, screen_size);
+    }
+    if (frame_buffer_device != -1)
+    {
+        close(frame_buffer_device);
+    }
+    if (joystick_device != -1)
+    {
+        close(joystick_device);
+    }
 }
 
 // This function should return the key that corresponds to the joystick press
@@ -91,13 +171,40 @@ int readSenseHatJoystick()
     the game. The tile must also be continuously moved when a joystick is
     continuously pressed.
     */
+    struct input_event ev;
+
+    while (read(joystick_device, &ev, sizeof(struct input_event)) > 0)
+    {
+        if (ev.type == EV_KEY && ev.value == 1)
+        { // Key press event
+            switch (ev.code)
+            {
+            case KEY_UP:
+                return KEY_UP;
+            case KEY_DOWN:
+                return KEY_DOWN;
+            case KEY_LEFT:
+                return KEY_LEFT;
+            case KEY_RIGHT:
+                return KEY_RIGHT;
+            case KEY_ENTER:
+                return KEY_ENTER;
+            }
+        }
+    }
 
     return 0;
+}
+
+void clearSenseHatMatrix()
+{
+    memset(fbp, 0, screen_size);
 }
 
 // This function should render the gamefield on the LED matrix. It is called
 // every game tick. The parameter playfieldChanged signals whether the game logic
 // has changed the playfield
+
 void renderSenseHatMatrix(bool const playfieldChanged)
 {
     // TODO:
@@ -113,6 +220,32 @@ void renderSenseHatMatrix(bool const playfieldChanged)
     field have the same color. You are free in how your program chooses
     colors, but pay attention that all colors must be well distinguishable.
     */
+    if (!playfieldChanged)
+    {
+        return;
+    }
+
+    // Clear the framebuffer
+    clearSenseHatMatrix();
+
+    // Render the playfield
+    for (unsigned int y = 0; y < game.grid.y; y++)
+    {
+        for (unsigned int x = 0; x < game.grid.x; x++)
+        {
+            coord const checkTile = {x, y};
+
+            if (!tileOccupied(checkTile))
+            {
+                continue;
+            }
+
+            int location = (x + 0) * (var_screeninfo.bits_per_pixel / 8) +
+                           (y + 0) * fixed_screeninfo.line_length;
+            *((unsigned int *)(fbp + location)) = getTileColor(checkTile);
+        }
+    }
+
     (void)playfieldChanged;
 }
 
@@ -123,6 +256,12 @@ void renderSenseHatMatrix(bool const playfieldChanged)
 static inline void newTile(coord const target)
 {
     game.playfield[target.y][target.x].occupied = true;
+    game.playfield[target.y][target.x].color = getRandomColor();
+}
+
+int getTileColor(coord const target)
+{
+    return game.playfield[target.y][target.x].color;
 }
 
 static inline void copyTile(coord const to, coord const from)
