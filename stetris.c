@@ -3,7 +3,10 @@
 #include <unistd.h>
 #include <termios.h>
 #include <sys/select.h>
+#include <sys/mman.h>
 #include <linux/input.h>
+#include <linux/fb.h>
+#include <linux/ioctl.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
@@ -63,6 +66,7 @@ gameConfig game = {
 // return false if something fails, else true
 bool initializeSenseHat()
 {
+    // TODO:
     return true;
 }
 
@@ -70,6 +74,7 @@ bool initializeSenseHat()
 // Here you can free up everything that you might have opened/allocated
 void freeSenseHat()
 {
+    // TODO:
 }
 
 // This function should return the key that corresponds to the joystick press
@@ -78,6 +83,15 @@ void freeSenseHat()
 // !!! when nothing was pressed you MUST return 0 !!!
 int readSenseHatJoystick()
 {
+    // TODO:
+    /*
+    The game must be playable with the Sense Hat joystick, such that a
+    left press moves the current tile to the left, a right press to the right
+    and a down press drops it to the bottom. A center press must exit
+    the game. The tile must also be continuously moved when a joystick is
+    continuously pressed.
+    */
+
     return 0;
 }
 
@@ -86,6 +100,19 @@ int readSenseHatJoystick()
 // has changed the playfield
 void renderSenseHatMatrix(bool const playfieldChanged)
 {
+    // TODO:
+    /*
+    Display the playing field on the Sense Hat 8x8 RGB LED matrix. Do
+    not display anything else than the tiles, so no scores or other statistics.
+    A requirement for this implementation is to memory map the frame
+    buffer of the LED matrix
+
+    Colourise the playing field such that each tile has a color that must
+    stay the same during the entire time it is visible on the LED matrix.
+    You have to vary the colors used so that not all tiles on the playing
+    field have the same color. You are free in how your program chooses
+    colors, but pay attention that all colors must be well distinguishable.
+    */
     (void)playfieldChanged;
 }
 
