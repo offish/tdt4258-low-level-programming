@@ -67,7 +67,6 @@ size_t screen_size = 8 * 8;
 static char *frame_buffer_pointer = 0;
 static int frame_buffer_device = -1;
 static int joystick_device = -1;
-static struct fb_var_screeninfo var_screeninfo;
 static struct fb_fix_screeninfo fixed_screeninfo;
 static struct input_keymap_entry keymap;
 
@@ -146,8 +145,6 @@ bool foundJoystickDevice()
 
         ioctl(joystick_device, EVIOCGNAME(sizeof(joystick_name)), joystick_name);
 
-        printf("Joystick device: %s\n", joystick_name);
-
         if (strcmp(joystick_name, "Raspberry Pi Sense HAT Joystick") == 0)
         {
             return true;
@@ -163,26 +160,10 @@ bool foundJoystickDevice()
 
 bool initializeSenseHat()
 {
-    // Open the framebuffer device
-    // struct fb_fix_screeninfo finfo;
     bool found_frame_buffer = foundFrameBuffer();
 
     if (!found_frame_buffer)
     {
-        return false;
-    }
-
-    // Get fixed screen information
-    if (ioctl(frame_buffer_device, FBIOGET_FSCREENINFO, &fixed_screeninfo))
-    {
-        perror("Error reading fixed information");
-        return false;
-    }
-
-    // Get variable screen information
-    if (ioctl(frame_buffer_device, FBIOGET_VSCREENINFO, &var_screeninfo))
-    {
-        perror("Error reading variable information");
         return false;
     }
 
@@ -263,8 +244,9 @@ int readSenseHatJoystick()
 
 int getLocation(unsigned int x, unsigned int y)
 {
-    return (x + 0) * (var_screeninfo.bits_per_pixel / 8) +
-           (y + 0) * fixed_screeninfo.line_length;
+    int bytes_per_pixel = 16 / 8;
+    return (x + 0) * bytes_per_pixel +
+           (y + 0) * (bytes_per_pixel * 8);
 }
 
 void clearSenseHatMatrix()
