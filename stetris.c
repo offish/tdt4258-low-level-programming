@@ -63,16 +63,13 @@ gameConfig game = {
     .initNextGameTick = 50,
 };
 
-#define SENSE_HAT_FB "/dev/fb0"
-#define SENSE_HAT_JOYSTICK "/dev/input/event0"
-#define RAND_MAX 6
-
 size_t screen_size = 8 * 8;
-static char *fbp = 0;
+static char *frame_buffer_pointer = 0;
 static int frame_buffer_device = -1;
 static int joystick_device = -1;
 static struct fb_var_screeninfo var_screeninfo;
 static struct fb_fix_screeninfo fixed_screeninfo;
+static struct input_keymap_entry keymap;
 
 const int red_color = 0xf800;
 const int green_color = 0x07e0;
@@ -81,13 +78,14 @@ const int cyan_color = 0x07ff;
 const int magenta_color = 0xf81f;
 const int yellow_color = 0xffe0;
 const int orange_color = 0xfd40;
+const int black = 0x0000;
 
 int colors[] = {red_color, green_color, blue_color, cyan_color, magenta_color, yellow_color, orange_color};
 unsigned int counter = 0;
 
 static inline bool tileOccupied(coord const target);
 
-int getRandomColor()
+int getNextColor()
 {
     counter++;
     return colors[counter % 7];
@@ -96,13 +94,81 @@ int getRandomColor()
 // This function is called on the start of your application
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
+
+bool foundFrameBuffer()
+{
+    unsigned int i = 0;
+    char frame_buffer_path[9];
+
+    while (i < FB_MAX)
+    {
+        snprintf(frame_buffer_path, sizeof(frame_buffer_path), "/dev/fb%d", i);
+        frame_buffer_device = open(frame_buffer_path, O_RDWR);
+
+        if (frame_buffer_device == -1)
+        {
+            i++;
+            continue;
+        }
+
+        if (ioctl(frame_buffer_device, FBIOGET_FSCREENINFO, &fixed_screeninfo) == 0)
+        {
+            if (strcmp(fixed_screeninfo.id, "RPi-Sense FB") == 0)
+            {
+                return true;
+            }
+        }
+
+        close(frame_buffer_device);
+        i++;
+    }
+
+    perror("Error: cannot find RPi-Sense framebuffer device");
+    return false;
+}
+
+bool foundJoystickDevice()
+{
+    unsigned int i = 0;
+    char joystick_path[20];
+    char joystick_name[32];
+
+    while (i < 9)
+    {
+        snprintf(joystick_path, sizeof(joystick_path), "/dev/input/event%d", i);
+        joystick_device = open(joystick_path, O_RDONLY | O_NONBLOCK);
+
+        if (joystick_device == -1)
+        {
+            i++;
+            continue;
+        }
+
+        ioctl(joystick_device, EVIOCGNAME(sizeof(joystick_name)), joystick_name);
+
+        printf("Joystick device: %s\n", joystick_name);
+
+        if (strcmp(joystick_name, "Raspberry Pi Sense HAT Joystick") == 0)
+        {
+            return true;
+        }
+
+        close(joystick_device);
+        i++;
+    }
+
+    perror("Error: cannot find RPi-Sense joystick device");
+    return false;
+}
+
 bool initializeSenseHat()
 {
-    frame_buffer_device = open(SENSE_HAT_FB, O_RDWR);
+    // Open the framebuffer device
+    // struct fb_fix_screeninfo finfo;
+    bool found_frame_buffer = foundFrameBuffer();
 
-    if (frame_buffer_device == -1)
+    if (!found_frame_buffer)
     {
-        perror("Error: cannot open framebuffer device");
         return false;
     }
 
@@ -121,18 +187,18 @@ bool initializeSenseHat()
     }
 
     // Map the device to memory
-    fbp = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, frame_buffer_device, 0);
-    if ((int)fbp == -1)
+    frame_buffer_pointer = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, frame_buffer_device, 0);
+
+    if ((int)frame_buffer_pointer == -1)
     {
         perror("Error: failed to map framebuffer device to memory");
         return false;
     }
 
-    // Open joystick device
-    joystick_device = open(SENSE_HAT_JOYSTICK, O_RDONLY | O_NONBLOCK);
-    if (joystick_device == -1)
+    bool found_joystick = foundJoystickDevice();
+
+    if (!found_joystick)
     {
-        perror("Error: cannot open joystick device");
         return false;
     }
 
@@ -143,9 +209,9 @@ bool initializeSenseHat()
 // Here you can free up everything that you might have opened/allocated
 void freeSenseHat()
 {
-    if (fbp)
+    if (frame_buffer_pointer)
     {
-        munmap(fbp, screen_size);
+        munmap(frame_buffer_pointer, screen_size);
     }
     if (frame_buffer_device != -1)
     {
@@ -163,42 +229,54 @@ void freeSenseHat()
 // !!! when nothing was pressed you MUST return 0 !!!
 int readSenseHatJoystick()
 {
-    // TODO:
-    /*
-    The game must be playable with the Sense Hat joystick, such that a
-    left press moves the current tile to the left, a right press to the right
-    and a down press drops it to the bottom. A center press must exit
-    the game. The tile must also be continuously moved when a joystick is
-    continuously pressed.
-    */
     struct input_event ev;
 
     while (read(joystick_device, &ev, sizeof(struct input_event)) > 0)
     {
-        if (ev.type == EV_KEY && ev.value == 1)
-        { // Key press event
-            switch (ev.code)
-            {
-            case KEY_UP:
-                return KEY_UP;
-            case KEY_DOWN:
-                return KEY_DOWN;
-            case KEY_LEFT:
-                return KEY_LEFT;
-            case KEY_RIGHT:
-                return KEY_RIGHT;
-            case KEY_ENTER:
-                return KEY_ENTER;
-            }
+        if (ev.type != EV_KEY)
+        {
+            continue;
+        }
+
+        if (ev.value != 1 && ev.value != 2)
+        {
+            continue;
+        }
+
+        switch (ev.code)
+        {
+        case KEY_UP:
+            return KEY_UP;
+        case KEY_DOWN:
+            return KEY_DOWN;
+        case KEY_LEFT:
+            return KEY_LEFT;
+        case KEY_RIGHT:
+            return KEY_RIGHT;
+        case KEY_ENTER:
+            return KEY_ENTER;
         }
     }
 
     return 0;
 }
 
+int getLocation(unsigned int x, unsigned int y)
+{
+    return (x + 0) * (var_screeninfo.bits_per_pixel / 8) +
+           (y + 0) * fixed_screeninfo.line_length;
+}
+
 void clearSenseHatMatrix()
 {
-    memset(fbp, 0, screen_size);
+    for (unsigned int y = 0; y < game.grid.y; y++)
+    {
+        for (unsigned int x = 0; x < game.grid.x; x++)
+        {
+            int location = getLocation(x, y);
+            *((unsigned int *)(frame_buffer_pointer + location)) = black;
+        }
+    }
 }
 
 // This function should render the gamefield on the LED matrix. It is called
@@ -207,25 +285,6 @@ void clearSenseHatMatrix()
 
 void renderSenseHatMatrix(bool const playfieldChanged)
 {
-    // TODO:
-    /*
-    Display the playing field on the Sense Hat 8x8 RGB LED matrix. Do
-    not display anything else than the tiles, so no scores or other statistics.
-    A requirement for this implementation is to memory map the frame
-    buffer of the LED matrix
-
-    Colourise the playing field such that each tile has a color that must
-    stay the same during the entire time it is visible on the LED matrix.
-    You have to vary the colors used so that not all tiles on the playing
-    field have the same color. You are free in how your program chooses
-    colors, but pay attention that all colors must be well distinguishable.
-    */
-    if (!playfieldChanged)
-    {
-        return;
-    }
-
-    // Clear the framebuffer
     clearSenseHatMatrix();
 
     // Render the playfield
@@ -240,9 +299,8 @@ void renderSenseHatMatrix(bool const playfieldChanged)
                 continue;
             }
 
-            int location = (x + 0) * (var_screeninfo.bits_per_pixel / 8) +
-                           (y + 0) * fixed_screeninfo.line_length;
-            *((unsigned int *)(fbp + location)) = getTileColor(checkTile);
+            int location = getLocation(x, y);
+            *((unsigned int *)(frame_buffer_pointer + location)) = getTileColor(checkTile);
         }
     }
 
@@ -256,7 +314,7 @@ void renderSenseHatMatrix(bool const playfieldChanged)
 static inline void newTile(coord const target)
 {
     game.playfield[target.y][target.x].occupied = true;
-    game.playfield[target.y][target.x].color = getRandomColor();
+    game.playfield[target.y][target.x].color = getNextColor();
 }
 
 int getTileColor(coord const target)
