@@ -86,6 +86,7 @@ static inline bool tileOccupied(coord const target);
 
 int getNextColor()
 {
+    // new color every 7th call
     counter++;
     return colors[counter % 7];
 }
@@ -93,31 +94,37 @@ int getNextColor()
 // This function is called on the start of your application
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
-
 bool foundFrameBuffer()
 {
     unsigned int i = 0;
     char frame_buffer_path[9];
 
+    // loop through all frame buffer devices
     while (i < FB_MAX)
     {
+        // format path string
         snprintf(frame_buffer_path, sizeof(frame_buffer_path), "/dev/fb%d", i);
+        // open device
         frame_buffer_device = open(frame_buffer_path, O_RDWR);
 
+        // check if device is valid
         if (frame_buffer_device == -1)
         {
             i++;
             continue;
         }
 
+        // get fixed screen info
         if (ioctl(frame_buffer_device, FBIOGET_FSCREENINFO, &fixed_screeninfo) == 0)
         {
+            // check if device is RPi-Sense
             if (strcmp(fixed_screeninfo.id, "RPi-Sense FB") == 0)
             {
                 return true;
             }
         }
 
+        // close device and move onto the next one
         close(frame_buffer_device);
         i++;
     }
@@ -132,24 +139,30 @@ bool foundJoystickDevice()
     char joystick_path[20];
     char joystick_name[32];
 
+    // loop through possible input devices
     while (i < 9)
     {
+        // format path string
         snprintf(joystick_path, sizeof(joystick_path), "/dev/input/event%d", i);
+        // open device
         joystick_device = open(joystick_path, O_RDONLY | O_NONBLOCK);
 
+        // check if device is valid
         if (joystick_device == -1)
         {
             i++;
             continue;
         }
 
+        // get device name
         ioctl(joystick_device, EVIOCGNAME(sizeof(joystick_name)), joystick_name);
-
+        // check if device is the correct joystick
         if (strcmp(joystick_name, "Raspberry Pi Sense HAT Joystick") == 0)
         {
             return true;
         }
 
+        // close device and move onto the next one
         close(joystick_device);
         i++;
     }
@@ -167,7 +180,7 @@ bool initializeSenseHat()
         return false;
     }
 
-    // Map the device to memory
+    // map the device to memory
     frame_buffer_pointer = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, frame_buffer_device, 0);
 
     if ((int)frame_buffer_pointer == -1)
@@ -190,6 +203,7 @@ bool initializeSenseHat()
 // Here you can free up everything that you might have opened/allocated
 void freeSenseHat()
 {
+    // free up devices
     if (frame_buffer_pointer)
     {
         munmap(frame_buffer_pointer, screen_size);
@@ -214,16 +228,19 @@ int readSenseHatJoystick()
 
     while (read(joystick_device, &ev, sizeof(struct input_event)) > 0)
     {
+        // is not a key event
         if (ev.type != EV_KEY)
         {
             continue;
         }
 
+        // is not a key press or auto-repeat event
         if (ev.value != 1 && ev.value != 2)
         {
             continue;
         }
 
+        // check which key was pressed
         switch (ev.code)
         {
         case KEY_UP:
@@ -245,12 +262,14 @@ int readSenseHatJoystick()
 int getLocation(unsigned int x, unsigned int y)
 {
     int bytes_per_pixel = 16 / 8;
-    return (x + 0) * bytes_per_pixel +
-           (y + 0) * (bytes_per_pixel * 8);
+    int bytes_per_line = bytes_per_pixel * 8;
+
+    return x * bytes_per_pixel + y * bytes_per_line;
 }
 
 void clearSenseHatMatrix()
 {
+    // loop through screen and set every pixel to black
     for (unsigned int y = 0; y < game.grid.y; y++)
     {
         for (unsigned int x = 0; x < game.grid.x; x++)
@@ -267,15 +286,17 @@ void clearSenseHatMatrix()
 
 void renderSenseHatMatrix(bool const playfieldChanged)
 {
+    // clear the screen
     clearSenseHatMatrix();
 
-    // Render the playfield
+    // loop through the playfield and draw the tiles
     for (unsigned int y = 0; y < game.grid.y; y++)
     {
         for (unsigned int x = 0; x < game.grid.x; x++)
         {
             coord const checkTile = {x, y};
 
+            // nothing to draw here
             if (!tileOccupied(checkTile))
             {
                 continue;
@@ -296,6 +317,7 @@ void renderSenseHatMatrix(bool const playfieldChanged)
 static inline void newTile(coord const target)
 {
     game.playfield[target.y][target.x].occupied = true;
+    // every new tile gets a "new" color (repeating every 7th iteration)
     game.playfield[target.y][target.x].color = getNextColor();
 }
 
