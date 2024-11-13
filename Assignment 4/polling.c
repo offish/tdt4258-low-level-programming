@@ -1,28 +1,29 @@
-#include "usart.c"
+#include "usart.h"
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
 
 void AC_init()
 {
+    // Set floating input pins to input with pull-up
+    PORTB.PINCONFIG = PORT_ISC_INPUT_DISABLE_gc | PORT_PULLUPEN_bm;
+    PORTB.PINCTRLUPD = 0xFF; // Update all pins on PORT B
+    PORTC.PINCONFIG = PORT_ISC_INPUT_DISABLE_gc | PORT_PULLUPEN_bm;
+    PORTC.PINCTRLUPD = 0xFF; // Update all pins on PORT C
+    PORTE.PINCONFIG = PORT_ISC_INPUT_DISABLE_gc | PORT_PULLUPEN_bm;
+    PORTE.PINCTRLUPD = 0xFF; // Update all pins on PORT E
+
     // Step 1
     // Set pin PD2 (port D, pin 2) as an input
     PORTD.DIRCLR = PIN2_bm;
     // Disable digital input buffer and pull-up resistor for pin PD2
     PORTD.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
 
-    PORTA.PINCTRLUPD = 0xFF; // Update all pins on PORT A
-    PORTB.PINCTRLUPD = 0xFF; // Update all pins on PORT B
-    PORTC.PINCTRLUPD = 0xFF; // Update all pins on PORT C
-    // PORTD.PINCTRLUPD = 0xFF;  // Update all pins on PORT D
-    PORTE.PINCTRLUPD = 0xFF; // Update all pins on PORT E
-
     // Step 2
-    // Select the positive and negative input sources
     AC0.MUXCTRL = AC_MUXPOS_AINP0_gc | AC_MUXNEG_DACREF_gc;
 
-    // Step 3 & 4
-    // Enable output and the Analog Comparator
-    AC0.CTRLA = AC_OUTEN_bm | AC_ENABLE_bm;
+    // Step 3
+    AC0.CTRLA = AC_POWER_PROFILE2_gc | AC_RUNSTDBY_bm | AC_ENABLE_bm;
+    AC0.CTRLB = AC_WINSEL_DISABLED_gc;
 
     // Set the DAC reference
     // DACREF = (0.1 / 1.024) * 256 = 25
@@ -36,31 +37,19 @@ void VREF_init(void)
 
 void LED_init()
 {
-    PORTA.DIRSET = PIN7_bm;
+    PORTA.DIRSET = PIN2_bm;
 }
 
 void set_LED_on()
 {
     // LED is active low. Set pin LOW to turn LED on
-    PORTA.OUTCLR = PIN7_bm;
+    PORTA.OUTCLR = PIN2_bm;
 }
 
 void set_LED_off()
 {
     // LED is active low. Set pin HIGH to turn LED off
-    PORTA.OUTSET = PIN7_bm;
-}
-
-bool AC_above_threshold()
-{
-    // Check the output of the Analog Comparator
-    return (bool)(AC0.STATUS & AC_CMPSTATE_bm);
-}
-
-// Function to initialize sleep mode
-void sleep_init(void)
-{
-    set_sleep_mode(SLEEP_MODE_STANDBY); // Standby sleep mode
+    PORTA.OUTSET = PIN2_bm;
 }
 
 void TCA0_init()
@@ -73,9 +62,14 @@ void TCA0_init()
     TCA0.SINGLE.CTRLA = TCA_SINGLE_RUNSTDBY_bm | TCA_SINGLE_CLKSEL_DIV2_gc | TCA_SINGLE_ENABLE_bm;
 }
 
+bool AC_above_threshold()
+{
+    // Check the output of the Analog Comparator
+    return (bool)(AC0.STATUS & AC_CMPSTATE_bm);
+}
+
 ISR(TCA0_OVF_vect)
 {
-    // Add your code here
     if (AC_above_threshold())
     {
         set_LED_off();
@@ -94,14 +88,14 @@ int main()
     AC_init();
     VREF_init();
     LED_init();
-    USART3_Init();
 
     // Initialize timer
     TCA0_init();
 
     // Enable interrupts
     sei();
-    sleep_init();
+
+    set_sleep_mode(SLEEP_MODE_STANDBY); // Standby sleep mode
 
     while (1)
     {
