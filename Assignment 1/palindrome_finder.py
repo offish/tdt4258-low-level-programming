@@ -1,10 +1,3 @@
-def check_input(string: str) -> bool:
-    if len(string) < 2:
-        return False
-
-    return True
-
-
 def is_palindrome(string: str) -> bool:
     # case insensitive
     string = string.lower()
@@ -25,20 +18,3 @@ def is_palindrome(string: str) -> bool:
             return False
 
     return True
-
-
-def main() -> None:
-    string = "Grav ned den varg"
-    # string = "K aYak"
-
-    is_valid_string = check_input(string)
-
-    if not is_valid_string:
-        print("Input has to be longer than 2 characters")
-        return
-
-    print(is_palindrome(string))
-
-
-if __name__ == "__main__":
-    main()
